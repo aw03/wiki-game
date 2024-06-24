@@ -600,3 +600,4 @@ scraping projects, here are some ideas:
   and build a tool that uses this data to find flight itineraries between different cities)
 - website crawler/archiver (download a webpage and all of the transitive links in a
   structure that can be hosted locally)
+--

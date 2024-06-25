@@ -18,7 +18,10 @@ module Network = struct
     include Comparable.Make (T)
 
     let of_string (s : string) =
-      match String.split s ~on:',' with
+      let pure_str =
+        String.concat (String.split_on_chars s ~on:[ '.'; ' ' ])
+      in
+      match String.split pure_str ~on:',' with
       | head :: tail -> Some (head, tail)
       | _ -> None
     ;;
@@ -86,6 +89,27 @@ let load_command =
         printf !"%{sexp: Network.t}\n" network]
 ;;
 
+module G = Graph.Imperative.Graph.Concrete (City)
+
+(* We extend our [Graph] structure with the [Dot] API so that we can easily
+   render constructed graphs. Documentation about this API can be found here:
+   https://github.com/backtracking/ocamlgraph/blob/master/src/dot.mli *)
+module Dot = Graph.Graphviz.Dot (struct
+    include G
+
+    (* These functions can be changed to tweak the appearance of the
+       generated graph. Check out the ocamlgraph graphviz API
+       (https://github.com/backtracking/ocamlgraph/blob/master/src/graphviz.mli)
+       for examples of what values can be set here. *)
+    let edge_attributes _ = [ `Dir `None ]
+    let default_edge_attributes _ = []
+    let get_subgraph _ = None
+    let vertex_attributes v = [ `Shape `Box; `Label v; `Fillcolor 1000 ]
+    let vertex_name v = v
+    let default_vertex_attributes _ = []
+    let graph_attributes _ = []
+  end)
+
 let visualize_command =
   let open Command.Let_syntax in
   Command.basic
@@ -107,8 +131,16 @@ let visualize_command =
           ~doc:"FILE where to write generated graph"
       in
       fun () ->
-        ignore (input_file : File_path.t);
-        ignore (output_file : File_path.t);
+        let network = Network.of_file input_file in
+        let graph = G.create () in
+        Set.iter network ~f:(fun x ->
+          let city1, city2 = x.city_pair in
+          (* [G.add_edge] auomatically adds the endpoints as vertices in the
+             graph if they don't already exist. *)
+          G.add_edge graph city1 city2);
+        Dot.output_graph
+          (Out_channel.create (File_path.to_string output_file))
+          graph;
         printf !"Done! Wrote dot file to %{File_path}\n%!" output_file]
 ;;
 

@@ -1,6 +1,12 @@
 body {
     max-width: 1000px;
     margin: auto;
-    background: #FAFAFA;
+    background: #9aebbe;
     font-family: Helvetica;
+}
+
+table,
+th,
+td {
+    border: 2px solid rgb(0, 0, 0);
 }

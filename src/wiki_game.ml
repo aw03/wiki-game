@@ -14,10 +14,20 @@ open! Core
    One nice think about Wikipedia is that stringent content moderation results in
    uniformity in article format. We can expect that all Wikipedia article links parsed
    from a Wikipedia page will have the form "/wiki/<TITLE>". *)
-let get_linked_articles contents : string list =
-  ignore (contents : string);
-  failwith "TODO"
+let get_linked_articles (contents:string ): string list =
+  let open Soup in 
+  (* parse contents && "a" |> to_list |> List.filter_map ~f:(fun x -> attribute "href" x ) |> List.filter ~f:(fun x -> match Wikipedia_namespace.namespace x with |None -> true |_ -> false) *)
+  let cont = parse contents in let nodes = cont $$ "a" in let node_list = to_list nodes in let attr_name = List.filter_map ~f:(fun x -> attribute "href" x ) node_list in
+   List.filter ~f:(fun x -> match Wikipedia_namespace.namespace x with |None -> true |_ -> false) attr_name |> List.filter ~f:(fun x -> String.length x >= 6 && String.equal (String.sub x ~pos:0 ~len:6) "/wiki/") |> List.dedup_and_sort ~compare:(String.compare)
 ;;
+
+let%expect_test "get linked artices cat" = 
+  let cont = File_fetcher.fetch_exn (Local (File_path.of_string "../resources")) ~resource:"/wiki/Cat" in  print_endline (String.concat ~sep:" " (get_linked_articles cont));
+  [%expect
+  {| 
+  /wiki/Carnivore /wiki/Domestication_of_the_cat /wiki/Mammal /wiki/Species
+  |}
+  ]
 
 let print_links_command =
   let open Command.Let_syntax in

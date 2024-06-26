@@ -149,13 +149,48 @@ let visualize_command =
    the ../resources/wiki directory.
 
    [max_depth] is useful to limit the time the program spends exploring the graph. *)
+
+(* let check_destination current ~destination = String.equal current destination *)
+
+
 let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch () =
   ignore (max_depth : int);
   ignore (origin : string);
   ignore (destination : string);
   ignore (how_to_fetch : File_fetcher.How_to_fetch.t);
   failwith "TODO"
+  
 ;;
+(* 
+let solve_path ~max_depth ~origin ~destination ~max_depth ~how_to_fetch (): unit =
+  let visited = Link.Hash_set.create () in
+  let to_do = Queue.create () in
+  Queue.enqueue to_do [ origin ];
+  let rec solve () =
+    let curr = Queue.dequeue to_do in
+    match curr with
+    | None -> print_endline "No possible solution!"
+    | _ ->
+      let spot = List.last_exn (Option.value_exn curr) in
+      Hash_set.add visited spot;
+      if check_reach_end spot (Grid.end_cord maze)
+      then print_solution (Option.value_exn curr)
+      else (
+        let new_spots =
+          List.filter
+            (get_neighbors
+               spot
+               ~height:(Grid.height maze)
+               ~width:maze.width
+               ~walls:maze.wall_cords)
+            ~f:(fun s -> not_visited s ~visited)
+        in
+        List.iter new_spots ~f:(fun s ->
+          Stack.push to_do (Option.value_exn curr @ [ s ]));
+        solve ())
+  in
+  solve ()
+;; *)
 
 let find_path_command =
   let open Command.Let_syntax in

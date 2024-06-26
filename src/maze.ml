@@ -1,24 +1,24 @@
 open! Core
 
-module Grid = struct
+module Coord = struct
   module T = struct
-    type t =
-      { height : int
-      ; width : int
-      ; wall_cords : (int * int) list
-      ; start_cord : int * int
-      ; end_cord : int * int
-      }
-    [@@deriving compare, sexp, fields]
+    type t = int * int [@@deriving compare, sexp, hash]
   end
 
   include T
   include Comparable.Make (T)
 end
 
-module Coord = struct
+module Grid = struct
   module T = struct
-    type t = int * int [@@deriving compare, sexp, hash]
+    type t =
+      { height : int
+      ; width : int
+      ; wall_cords : (int * int) list
+      ; start_cord : Coord.t
+      ; end_cord : Coord.t
+      }
+    [@@deriving compare, sexp, fields]
   end
 
   include T
@@ -129,6 +129,22 @@ let solve_command =
           ~doc:"FILE a file containing a maze"
       in
       fun () -> solve_maze input_file]
+;;
+
+let%expect_test "Maze should return the grid coords which are 0 index based \
+                 from the start point until the end point"
+  =
+  solve_maze (File_path.of_string "/resources/maze_small.txt");
+  [%expect
+    {| 
+    (1,0)                                
+    (1,1)
+    (1,2)
+    (1,3)
+    (1,4)
+    (2,4)
+    (2,5)
+  |}]
 ;;
 
 let command =

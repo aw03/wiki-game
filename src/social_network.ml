@@ -149,18 +149,29 @@ let get_neighbors (name : string) ~(network : Network.t) : Person.Set.t =
 
 (* [find_friend_group network ~person] returns a list of all people who are
    mutually connected to the provided [person] in the provided [network]. *)
-let find_friend_group (network: Network.t ) ~(person:Person.t) : Person.t list =
+let find_friend_group (network : Network.t) ~(person : Person.t)
+  : Person.t list
+  =
   let visited = Person.Hash_set.create () in
-  let to_do = Queue.create () in Queue.enqueue to_do person;
-  let rec find_friends = 
-    (let curr = Queue.dequeue to_do in 
+  let to_do = Queue.create () in
+  Queue.enqueue to_do person;
+  let rec find_friends () =
+    let curr = Queue.dequeue to_do in
     match curr with
-    | None -> []
-    | _ -> (
-      Hash_set.add visited curr;
-    ))
-
+    | None -> ()
+    | _ ->
+      let name = Option.value_exn curr in
+      Hash_set.add visited name;
+      Set.iter (get_neighbors name ~network) ~f:(fun x ->
+        if Hash_set.mem visited x then () else Queue.enqueue to_do x);
+      find_friends ()
+  in
+  find_friends ();
+  Hash_set.to_list visited
 ;;
+
+(* let%expect_test "get all connections" = let all_people = Network.of_file
+   "resources/friends.txt" *)
 
 let find_friend_group_command =
   let open Command.Let_syntax in

@@ -39,18 +39,81 @@ let print_links_command =
         let contents = File_fetcher.fetch_exn how_to_fetch ~resource in
         List.iter (get_linked_articles contents) ~f:print_endline]
 ;;
+(* module Link = struct
+  module T = struct
+  type t = {
+    address:string
+  } [@@deriving compare, sexp]
+  end
+include T
+include Comparable.Make (T)
+end *)
+
+module Link = String
+
+module Connection = struct
+  module T = struct
+  type t = {
+    link1: Link.t;
+    link2: Link.t
+  } [@@deriving compare, sexp]
+  end
+include T
+  include Comparable.Make (T)
+end
+
+module G = Graph.Imperative.Graph.Concrete (Link)
+
+(* We extend our [Graph] structure with the [Dot] API so that we can easily
+   render constructed graphs. Documentation about this API can be found here:
+   https://github.com/backtracking/ocamlgraph/blob/master/src/dot.mli *)
+module Dot = Graph.Graphviz.Dot (struct
+    include G
+
+    (* These functions can be changed to tweak the appearance of the
+       generated graph. Check out the ocamlgraph graphviz API
+       (https://github.com/backtracking/ocamlgraph/blob/master/src/graphviz.mli)
+       for examples of what values can be set here. *)
+    let edge_attributes _ = [ `Dir `None ]
+    let default_edge_attributes _ = []
+    let get_subgraph _ = None
+    let vertex_attributes v = [ `Shape `Box; `Label v; `Fillcolor 1000 ]
+    let vertex_name v = v
+    let default_vertex_attributes _ = []
+    let graph_attributes _ = []
+  end)
+
+let get_article_name (address:string) ~(how_to_fetch:File_fetcher.How_to_fetch.t):string = 
+  let open Soup in let contents = File_fetcher.fetch_exn how_to_fetch ~resource:address in 
+  parse contents $$ "title" |> to_list  |> (fun x -> List.nth_exn x 0) |> texts |> String.concat |> String.split_on_chars ~on:['-';' ';'(';')'] |> String.concat
 
 (* [visualize] should explore all linked articles up to a distance of [max_depth] away
    from the given [origin] article, and output the result as a DOT file. It should use the
    [how_to_fetch] argument along with [File_fetcher] to fetch the articles so that the
    implementation can be tested locally on the small dataset in the ../resources/wiki
    directory. *)
-let visualize ?(max_depth = 3) ~origin ~output_file ~how_to_fetch () : unit =
-  ignore (max_depth : int);
-  ignore (origin : string);
-  ignore (output_file : File_path.t);
-  ignore (how_to_fetch : File_fetcher.How_to_fetch.t);
-  failwith "TODO"
+
+let rec all_nodes  max_depth ~(origin:string) ~(how_to_fetch:File_fetcher.How_to_fetch.t) : Connection.t list = 
+  let contents = File_fetcher.fetch_exn how_to_fetch ~resource:origin in
+  let hyper_links = get_linked_articles contents in 
+  let connection_list = List.map hyper_links ~f:(fun other -> {Connection.link1 = origin; link2 =  other }) in
+  if max_depth > 0 then (
+    let deeper_list = List.concat_map hyper_links ~f:(fun address -> all_nodes (max_depth -1) ~origin:address ~how_to_fetch) in connection_list @ deeper_list
+  )
+  else
+    connection_list
+
+let visualize ?(max_depth = 3) ~(origin:string) ~(output_file:File_path.t) ~(how_to_fetch:File_fetcher.How_to_fetch.t) () : unit =
+  let network = all_nodes max_depth ~origin ~how_to_fetch in
+        let graph = G.create () in
+        List.iter network ~f:(fun connect ->
+          let name1 = get_article_name connect.link1 ~how_to_fetch in let name2 = get_article_name connect.link2 ~how_to_fetch in
+          (* [G.add_edge] auomatically adds the endpoints as vertices in the
+             graph if they don't already exist. *)
+          G.add_edge graph name1 name2);
+        Dot.output_graph
+          (Out_channel.create (File_path.to_string output_file))
+          graph;
 ;;
 
 let visualize_command =

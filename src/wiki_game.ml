@@ -85,7 +85,7 @@ module Dot = Graph.Graphviz.Dot (struct
 
 let get_article_name (address:string) ~(how_to_fetch:File_fetcher.How_to_fetch.t):string = 
   let open Soup in let contents = File_fetcher.fetch_exn how_to_fetch ~resource:address in 
-  parse contents $$ "title" |> to_list  |> (fun x -> List.nth_exn x 0) |> texts |> String.concat |> String.split_on_chars ~on:['-';' ';'(';')'] |> String.concat
+  parse contents $$ "title" |> to_list  |> (fun x -> List.nth_exn x 0) |> texts |> String.concat |> String.split_on_chars ~on:['-';' ';'(';')';'.'] |> String.concat
 
 (* [visualize] should explore all linked articles up to a distance of [max_depth] away
    from the given [origin] article, and output the result as a DOT file. It should use the
@@ -150,47 +150,66 @@ let visualize_command =
 
    [max_depth] is useful to limit the time the program spends exploring the graph. *)
 
-(* let check_destination current ~destination = String.equal current destination *)
+   let correct_url url = function
+   | File_fetcher.How_to_fetch.Local _ -> url
+   | Remote -> (
+     if not (String.is_prefix ~prefix:"https://en.wikipedia.org" url) then
+       "https://en.wikipedia.org" ^ url else url
+   )
 
+let check_destination current ~destination ~how_to_fetch= String.equal (correct_url current how_to_fetch) (correct_url destination how_to_fetch)
 
-let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch () =
-  ignore (max_depth : int);
-  ignore (origin : string);
-  ignore (destination : string);
-  ignore (how_to_fetch : File_fetcher.How_to_fetch.t);
-  failwith "TODO"
+(* let get_solution url_list ~how_to_fetch = List.map url_list ~f:(fun url -> get_article_name ~how_to_fetch url) *)
+
+let get_parse_solution (url_list: (string * int) list)~how_to_fetch = List.map url_list ~f:(fun (url, _dist) -> get_article_name ~how_to_fetch (correct_url url how_to_fetch))
+ let not_visited ~(visited: Link.Hash_set.t) spot = not (Hash_set.mem visited spot)
+
+let fetch_wikis (url:string) ~(how_to_fetch:File_fetcher.How_to_fetch.t) = File_fetcher.fetch_exn ~resource:(correct_url url how_to_fetch) how_to_fetch
   
 ;;
-(* 
-let solve_path ~max_depth ~origin ~destination ~max_depth ~how_to_fetch (): unit =
+
+let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch (): string list option =
   let visited = Link.Hash_set.create () in
   let to_do = Queue.create () in
-  Queue.enqueue to_do [ origin ];
+  Queue.enqueue to_do [ (origin,max_depth) ];
   let rec solve () =
     let curr = Queue.dequeue to_do in
     match curr with
-    | None -> print_endline "No possible solution!"
+    | None -> None
     | _ ->
-      let spot = List.last_exn (Option.value_exn curr) in
+      let (spot, distance)= List.last_exn (Option.value_exn curr) in
       Hash_set.add visited spot;
-      if check_reach_end spot (Grid.end_cord maze)
-      then print_solution (Option.value_exn curr)
+      if check_destination spot ~destination ~how_to_fetch
+      then Some (get_parse_solution (Option.value_exn curr) ~how_to_fetch)
       else (
+        (if max_depth > 0 then (
         let new_spots =
           List.filter
-            (get_neighbors
-               spot
-               ~height:(Grid.height maze)
-               ~width:maze.width
-               ~walls:maze.wall_cords)
+            (get_linked_articles (fetch_wikis ~how_to_fetch spot))
             ~f:(fun s -> not_visited s ~visited)
         in
         List.iter new_spots ~f:(fun s ->
-          Stack.push to_do (Option.value_exn curr @ [ s ]));
-        solve ())
+          Queue.enqueue to_do (Option.value_exn curr @ [ (s,(distance-1) )]) ))
+        else ()); solve ())
   in
   solve ()
-;; *)
+;;
+
+(* let rec solve_path  ~max_depth ~(path:string list) ~destination ~(how_to_fetch:File_fetcher.How_to_fetch.t) ~(visited : Link.Hash_set.t ): string list option = 
+  let curr = List.last_exn path in 
+  Hash_set.add visited curr;
+  if check_destination curr ~destination ~how_to_fetch then Some (get_solution path ~how_to_fetch) else (
+  let hyper_links = get_linked_articles (fetch_wikis ~how_to_fetch curr) in 
+  if max_depth > 0 then (
+    let to_check = List.filter hyper_links ~f:(not_visited ~visited) in 
+    let result = List.find_map to_check ~f:(fun lin -> print_endline lin; solve_path ~max_depth:(max_depth-1) ~path:(path @ [lin]) ~destination ~how_to_fetch ~visited) in result
+  )
+  else
+    None
+  )
+
+let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch (): string list option = 
+  let start_path = [origin] in solve_path ~max_depth ~path:start_path ~destination ~how_to_fetch ~visited:(Link.Hash_set.create ()) *)
 
 let find_path_command =
   let open Command.Let_syntax in

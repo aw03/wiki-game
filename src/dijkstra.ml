@@ -1,6 +1,6 @@
-(* Note: This incantation allows us to tell the compiler to temporarily stop notifying us
-   when we have unused functions and values. Feel free to delete after completing
-   exercise 6. *)
+(* Note: This incantation allows us to tell the compiler to temporarily stop
+   notifying us when we have unused functions and values. Feel free to delete
+   after completing exercise 6. *)
 [@@@disable_unused_warnings]
 
 open Core
@@ -18,9 +18,9 @@ end = struct
     type t = int [@@deriving compare, equal, sexp]
   end
 
-  (* Remember that this is the syntax for include modules such as [Map] and [Set] that are
-     provided by [Comparable.Make] to our module. In our case, we use [Node_id.Map.t] in
-     the [Nodes.t]. *)
+  (* Remember that this is the syntax for include modules such as [Map] and
+     [Set] that are provided by [Comparable.Make] to our module. In our case,
+     we use [Node_id.Map.t] in the [Nodes.t]. *)
   include T
   include Comparable.Make (T)
 
@@ -38,7 +38,7 @@ module Edge = struct
       ; b : Node_id.t
       ; distance : int
       }
-    [@@deriving compare, equal, sexp]
+    [@@deriving compare, equal, sexp, fields]
   end
 
   include T
@@ -48,14 +48,22 @@ end
 module Edges = struct
   type t = Edge.t list [@@deriving sexp]
 
-  (* Exercise 1: Given a [t] (list of edges) and a [Node_id.t], implement a function that
-     returns a list of neighboring nodes with their corresponding distances. *)
-  let neighbors t node_id : (Node_id.t * int) list = []
+  (* Exercise 1: Given a [t] (list of edges) and a [Node_id.t], implement a
+     function that returns a list of neighboring nodes with their
+     corresponding distances. *)
+  let neighbors t node_id : (Node_id.t * int) list =
+    List.filter_map t ~f:(fun ed ->
+      if Node_id.equal (Edge.a ed) node_id
+      then Some (Edge.b ed, Edge.distance ed)
+      else if Node_id.equal (Edge.b ed) node_id
+      then Some (Edge.a ed, Edge.distance ed)
+      else None)
+  ;;
 
-  (* We've left all of the tets in this file disabled. As you complete the exercises,
-     please make sure to remove `[@tags "disabled"]` and run `dune runtest` to ensure that
-     your implementation passes the test. *)
-  let%expect_test ("neighbors" [@tags "disabled"]) =
+  (* We've left all of the tets in this file disabled. As you complete the
+     exercises, please make sure to remove `[@tags "disabled"]` and run `dune
+     runtest` to ensure that your implementation passes the test. *)
+  let%expect_test "neighbors" =
     let n = Node_id.create in
     let n0, n1, n2, n3, n4, n5 = n 0, n 1, n 2, n 3, n 4, n 5 in
     let t =
@@ -100,9 +108,19 @@ module Nodes = struct
       will be updated in the course of our graph search to keep track of progress. *)
   type t = Node.t Node_id.Map.t [@@deriving sexp]
 
-  (* Exercise 2: Given a list of edges, create a [t] that contains all nodes found in the
-     edge list. Note that you can construct [Node.t]s with the [Node.init] function. *)
-  let of_edges edges = Node_id.Map.empty
+  (* Exercise 2: Given a list of edges, create a [t] that contains all nodes
+     found in the edge list. Note that you can construct [Node.t]s with the
+     [Node.init] function. *)
+  let of_edges (edges : Edges.t) : Node.t Node_id.Map.t =
+    let node_map =
+      Node_id.Map.of_alist_exn
+        (List.concat
+           (List.map edges ~f:(fun ed ->
+              [ Edge.a ed, Node.init (); Edge.a ed, Node.init () ])))
+    in
+    node_map
+  ;;
+
   let find = Map.find_exn
   let state t node_id = find t node_id |> Node.state
 
@@ -111,11 +129,34 @@ module Nodes = struct
     Node.set_state node state
   ;;
 
-  (* Exercise 3: Given a [t], find the next node to process by selecting the node with the
-     smallest distance along with its via route. *)
-  let next_node t : (Node_id.t * (int * Node_id.t)) option = None
+  (* Exercise 3: Given a [t], find the next node to process by selecting the
+     node with the smallest distance along with its via route. *)
 
-  let%expect_test ("next_node" [@tags "disabled"]) =
+  let map_min_dist
+    (to_do_list :
+      (Node_id.t, int * Node_id.t, Node_id.comparator_witness) Map_intf.Map.t)
+    : (Node_id.t * (int * Node_id.t)) option
+    =
+    let smallest = ref (Map.nth to_do_list 0) in
+    Map.iteri to_do_list ~f:(fun ~key:nod ~data:(dist, via) ->
+      match !smallest with
+      | None -> smallest := Some (nod, (dist, via))
+      | Some (n, (d, v)) ->
+        if dist < d then smallest := Some (nod, (dist, via)) else ());
+    !smallest
+  ;;
+
+  let next_node (t : t) : (Node_id.t * (int * Node_id.t)) option =
+    let to_do_map =
+      Map.filter_mapi t ~f:(fun ~key:node_id ~data:nod ->
+        match Node.state nod with
+        | Todo todos -> Some (todos.distance, todos.via)
+        | _ -> None)
+    in
+    map_min_dist to_do_map
+  ;;
+
+  let%expect_test "next_node" =
     let n = Node_id.create in
     let n0, n1, n2, n3, n4, n5 = n 0, n 1, n 2, n 3, n 4, n 5 in
     let t =
@@ -133,18 +174,19 @@ module Nodes = struct
     [%expect {| (next_node ((4 (1 1)))) |}]
   ;;
 
-  (* Exercise 4: Given a [t] that has already been processed from some origin -- that is
-     the origin has been marked as [Origin] and nodes on the shortest path have been
-     marked as [Done] -- return the path from the origin to the given [distination]. *)
+  (* Exercise 4: Given a [t] that has already been processed from some origin
+     -- that is the origin has been marked as [Origin] and nodes on the
+     shortest path have been marked as [Done] -- return the path from the
+     origin to the given [distination]. *)
   let path t destination : Node_id.t list = []
 
   (* Excercise 5: Write an expect test for the [path] function above. *)
   let%expect_test "path" = ()
 end
 
-(* Exercise 6: Using the functions and types above, implement Dijkstras graph search
-   algorithm! Remember to reenable unused warnings by deleting the first line of this
-   file. *)
+(* Exercise 6: Using the functions and types above, implement Dijkstras graph
+   search algorithm! Remember to reenable unused warnings by deleting the
+   first line of this file. *)
 let shortest_path ~edges ~origin ~destination : Node_id.t list = []
 
 let%expect_test ("shortest_path" [@tags "disabled"]) =
@@ -167,4 +209,5 @@ let%expect_test ("shortest_path" [@tags "disabled"]) =
   [%expect {| (0 1 2 4 5) |}]
 ;;
 
-(* Exercise 7: Add some more test cases, exploring any corner cases you can think of. *)
+(* Exercise 7: Add some more test cases, exploring any corner cases you can
+   think of. *)

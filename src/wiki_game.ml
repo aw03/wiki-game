@@ -202,7 +202,7 @@ let find_path ?(max_depth = 3) ~origin ~destination ~how_to_fetch (): string lis
   let hyper_links = get_linked_articles (fetch_wikis ~how_to_fetch curr) in 
   if max_depth > 0 then (
     let to_check = List.filter hyper_links ~f:(not_visited ~visited) in 
-    let result = List.find_map to_check ~f:(fun lin -> print_endline lin; solve_path ~max_depth:(max_depth-1) ~path:(path @ [lin]) ~destination ~how_to_fetch ~visited) in result
+    let result = List.find_map to_check ~f:(fun lin -> solve_path ~max_depth:(max_depth-1) ~path:(path @ [lin]) ~destination ~how_to_fetch ~visited) in result
   )
   else
     None

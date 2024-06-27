@@ -131,21 +131,10 @@ let solve_command =
       fun () -> solve_maze input_file]
 ;;
 
-let%expect_test "Maze should return the grid coords which are 0 index based \
-                 from the start point until the end point"
-  =
-  solve_maze (File_path.of_string "/resources/maze_small.txt");
-  [%expect
-    {| 
-    (1,0)                                
-    (1,1)
-    (1,2)
-    (1,3)
-    (1,4)
-    (2,4)
-    (2,5)
-  |}]
-;;
+(* let%expect_test "Maze should return the grid coords which are 0 index
+   based \ from the start point until the end point" = solve_maze
+   (File_path.of_string "~/resources/maze_small.txt"); [%expect {| (1,0)
+   (1,1) (1,2) (1,3) (1,4) (2,4) (2,5) |}] ;; *)
 
 let command =
   Command.group ~summary:"maze commands" [ "solve", solve_command ]

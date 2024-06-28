@@ -114,9 +114,12 @@ module Nodes = struct
   let of_edges (edges : Edges.t) : Node.t Node_id.Map.t =
     let node_map =
       Node_id.Map.of_alist_exn
-        (List.concat
-           (List.map edges ~f:(fun ed ->
-              [ Edge.a ed, Node.init (); Edge.a ed, Node.init () ])))
+        (List.map
+           (List.dedup_and_sort
+              ~compare:Node_id.compare
+              (List.concat
+                 (List.map edges ~f:(fun ed -> [ Edge.a ed; Edge.b ed ]))))
+           ~f:(fun x -> x, Node.init ()))
     in
     node_map
   ;;
@@ -174,22 +177,113 @@ module Nodes = struct
     [%expect {| (next_node ((4 (1 1)))) |}]
   ;;
 
+  let rec dest_to_origin (t : t) (curr_node_id : Node_id.t) : Node_id.t list =
+    let curr_node = Map.find_exn t curr_node_id in
+    match curr_node.state with
+    | Done via ->
+      let prev_node = via.via in
+      dest_to_origin t prev_node @ [ curr_node_id ]
+    | Origin -> [ curr_node_id ]
+    | _ -> []
+  ;;
+
   (* Exercise 4: Given a [t] that has already been processed from some origin
      -- that is the origin has been marked as [Origin] and nodes on the
      shortest path have been marked as [Done] -- return the path from the
      origin to the given [distination]. *)
-  let path t destination : Node_id.t list = []
+  let path (t : t) (destination : Node_id.t) : Node_id.t list =
+    dest_to_origin t destination
+  ;;
 
   (* Excercise 5: Write an expect test for the [path] function above. *)
-  let%expect_test "path" = ()
+  let%expect_test "path" =
+    let n = Node_id.create in
+    let n0, n1, n2, n3, n4, n5 = n 0, n 1, n 2, n 3, n 4, n 5 in
+    let t =
+      [ n0, { Node.state = Origin }
+      ; n1, { Node.state = Done { via = n0 } }
+      ; n2, { Node.state = Done { via = n1 } }
+      ; n3, { Node.state = Todo { distance = 2; via = n1 } }
+      ; n4, { Node.state = Todo { distance = 1; via = n1 } }
+      ; n5, { Node.state = Unseen }
+      ]
+      |> Node_id.Map.of_alist_exn
+    in
+    let node_p = dest_to_origin t n2 in
+    List.iter node_p ~f:(fun node -> print_s [%message (node : Node_id.t)]);
+    [%expect {| 
+    (node 0)
+    (node 1) 
+    (node 2)
+    |}]
+  ;;
 end
+
+let make_to_do
+  (network : Node.t Node_id.Map.t)
+  (nodes_list : (Node_id.t * int) list)
+  (parent : Node_id.t)
+  (distance : int)
+  =
+  List.iter nodes_list ~f:(fun (nod, dist) ->
+    match Node.state (Nodes.find network nod) with
+    | Todo elt ->
+      if distance + dist < elt.distance
+      then
+        Nodes.set_state
+          network
+          nod
+          (Node.State.Todo { distance = distance + dist; via = parent })
+      else ()
+    | Unseen ->
+      Nodes.set_state
+        network
+        nod
+        (Node.State.Todo { distance = distance + dist; via = parent })
+    | _ -> ())
+;;
+
+let rec find_path
+  ~(edges : Edge.t list)
+  ~(network : Node.t Node_id.Map.t)
+  ~(spot : Node_id.t)
+  ~(dist : int)
+  ~(destination : Node_id.t)
+  : Node_id.t list
+  =
+  (* print_s ([%sexp_of: Node_id.t] spot); *)
+  (match Nodes.state network spot with
+   | Origin -> ()
+   | Todo elt ->
+     Nodes.set_state network spot (Node.State.Done { via = elt.via })
+   | _ -> ());
+  if Node_id.equal spot destination
+  then Nodes.path network destination
+  else (
+    let neighbors = Edges.neighbors edges spot in
+    make_to_do network neighbors spot dist;
+    let explore_next = Nodes.next_node network in
+    match explore_next with
+    | None -> []
+    | Some (id, (dist, via)) ->
+      find_path ~edges ~network ~spot:id ~dist ~destination)
+;;
 
 (* Exercise 6: Using the functions and types above, implement Dijkstras graph
    search algorithm! Remember to reenable unused warnings by deleting the
    first line of this file. *)
-let shortest_path ~edges ~origin ~destination : Node_id.t list = []
+let shortest_path
+  ~(edges : Edge.t list)
+  ~(origin : Node_id.t)
+  ~(destination : Node_id.t)
+  : Node_id.t list
+  =
+  let nodes_net = Nodes.of_edges edges in
+  Nodes.set_state nodes_net origin Node.State.Origin;
+  find_path ~edges ~network:nodes_net ~spot:origin ~dist:0 ~destination
+;;
 
-let%expect_test ("shortest_path" [@tags "disabled"]) =
+let%expect_test "shortest_path" =
   let n = Node_id.create in
   let n0, n1, n2, n3, n4, n5 = n 0, n 1, n 2, n 3, n 4, n 5 in
   let edges =
